@@ -114,7 +114,7 @@ uart:
 #from Display control board RX pin to MCU board RX pin UART3
 #gives us real time exhaust pipe temps in middle byte
   - id: mcu_uart_RXpin
-    rx_pin: GPIO21 #attach new wire to RX labled pin on DISPLAY board
+    rx_pin: GPIO19 #attach new wire to RX labled pin on DISPLAY board
     baud_rate: 2400
     rx_buffer_size: 80
     debug:
@@ -861,7 +861,7 @@ switch:
 #
 #wire the time LED on front panel to GPIO1 to indicate when new P5 level is on       
   - platform: gpio
-    pin: GPIO19 #use 470ohm resistor in line w led
+    pin: GPIO14 #use 470ohm resistor in line w led
     name: "${location} P5 indicator LED"
     inverted: yes
     id: p5_indicator
