@@ -1,6 +1,6 @@
 #add these lines to configuration.yaml, if they don't exist
 automation: !include automations.yaml
-#script: !include scripts.yaml
-#scene: !include scenes.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
 binary_sensor: !include binary_sensor.yaml
 sensor: !include sensor.yaml

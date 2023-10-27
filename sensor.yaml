@@ -2,7 +2,7 @@
 #House Pellet Stove
   - platform: template
     sensors:
-        house_error_code_decoded:
+        SOMEWHERE_stove_error_code_decoded:
          value_template: >
           {% set Pval2 = states('sensor.house_stove_error_code') | float(0)  %}
           {% if   Pval2  == 32768 %} E2 Failure to ignite Pot 
@@ -19,30 +19,29 @@
           {% elif Pval2  == 0 %} Normal Operation
           {% endif %}
     #display yes or no
-        house_bs_error_yesno:
+        SOMEWHERE_stove_error_yesno:
           value_template: >
             {% if is_state('binary_sensor.bs_stove_error',  'on') %} Yes
             {% elif is_state('binary_sensor.bs_stove_error',  'off') %} No
             {% endif %}
     #just for graphing the value. 
-        house_bs_error_10:
+        SOMEWHERE_stove_error_10:
           value_template: >
             {% if is_state('binary_sensor.bs_stove_error',  'on') %} {{60}}
             {% elif is_state('binary_sensor.bs_stove_error',  'off') %} {{55}}
             {% endif %}
     #Cooling or lighting?
-        house_stove_pipe_heating_or_cooling:
+        SOMEWHERE_stove_pipe_heating_or_cooling:
           value_template: >
-            {% if   is_state('binary_sensor.house_stove_pipe_temp_falling', 'on') and is_state('binary_sensor.house_stove_pipe_temp_rising', 'off') and states('sensor.house_stove_pipe_temp') | float(0) > 100  %} Cooling
-            {% elif is_state( 'binary_sensor.house_stove_pipe_temp_rising', 'on') and is_state('binary_sensor.house_stove_pipe_temp_falling', 'off') and states('sensor.house_stove_pipe_temp') | float(0) > 100%} Heating
+            {% if   is_state('binary_sensor.SOMEWHERE_stove_pipe_temp_falling', 'on') and is_state('binary_sensor.SOMEWHERE_stove_pipe_temp_rising', 'off') and states('sensor.SOMEWHERE_stove_pipe_temp') | float(0) > 100  %} Cooling
+            {% elif is_state( 'binary_sensor.SOMEWHERE_stove_pipe_temp_rising', 'on') and is_state('binary_sensor.SOMEWHERE_stove_pipe_temp_falling', 'off') and states('sensor.SOMEWHERE_stove_pipe_temp') | float(0) > 100%} Heating
             {% elif states('sensor.house_stove_pipe_temp') | float(0) <= 100  %}  
              Idling & Cool
             {% else %}
              No Data
             {% endif %}
     # Detect Goodbye Message Failure if curr. temp is 4 degrees <= set temp
-        house_stove_error:
-          value_template: "{{ states('sensor.house_stove_current_temp')|float(0) +4  <= states('sensor.house_stove_set_temp')|float(0) }}"
-        house_stove_hvac_action:
-          value_template: = "{{state_attr('climate.dev32_wood_pellet_stove','hvac_action')}}"
-          
+        SOMEWHERE_stove_error:
+          value_template: "{{ states('sensor.SOMEWHERE_stove_current_temp')|float(0) +4  <= states('sensor.SOMEWHERE_stove_set_temp')|float(0) }}"
+        SOMEWHERE_stove_hvac_action:
+          value_template: = "{{state_attr('climate.SOMEWHERE_stove','hvac_action')}}"
