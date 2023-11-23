@@ -1,5 +1,11 @@
+#pellet
 #----------------------------------------------------------
 # TUYA WOOD PELLET STOVE Converted to ESP32
+# Version 4.0: BPoHVoodoo
+# changed to use with Nemaxx Px,
+# changed to use °C instead of Fahrenheit
+# simplified Code
+# P5 only kicks in, if SET_TEMP < CURRENT_TEMP and if we are 100% sure to be in ECO2
 # version; 3.1.0
 # changed to use with Nemaxx Px, added WebServer
 # date: 04-10-23 bug fixes
@@ -27,156 +33,52 @@
 #
 substitutions:
   device_name: "pellet-ofen"
-  device_description: Pellet Ofen mit ESPHome Sparkfun ESP32 Thing
-  friendly_name: Pellet Ofen
-  location: SOMEWHERE
+  device_description: Pellet Ofen mit ESPHome auf Wemos D1 mini32
+  friendly_name: Pellet-Ofen
+  location: Irgendwo
   lighting_count: "45" #sets max number of dumps of pellets during lighting
+  switch_lighting2heating: "60.0" # 60°C or 140.0 F  # exactly the point it switches from "lighting to heating"
 #----------------------------------------------------------
-
+#
 esp32:
-  board: esp32thing
-
+  board: wemos_d1_mini32
 # Enable logging
 logger:
   level: debug
   baud_rate: 0 #required for UART sniffer to work
 debug:
-  update_interval: 60s    
-
+  update_interval: 60s
 # Enable Home Assistant API
 api:
-  reboot_timeout: 0s # disabled so if we lose home assistant keep running
+  reboot_timeout: 60min # if we lose home assistant keep running for 60 mins
   encryption:
-    key: "YOURKEY"
-
+    key: !secret enc_key
+#
 ota:
-  password: "YOURPASS"
-
+  password: !secret ota_password
+#
 wifi:
-  use_address: 192.168.120.50 # use when renaming this node
+  #use_address: 192.168.123.52 # use when renaming this node
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   power_save_mode: none
-  # use_address: 192.168.1.192
+  reboot_timeout: 30min
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
-    ssid: "${location}-Pellet-Stove"
+    ssid: "${location}-${friendly_name}"
     password: !secret wifi_password
 #
-
 captive_portal:
-
 # Example configuration entry
 web_server:
   port: 80
-  include_internal: True
+  include_internal: true
+  local: true
   auth:
     username: !secret web_server_username
     password: !secret web_server_password
-
 #
-# define 3 hardware UARTS, 1 for TuyaMCU, others for MCU Display & temps monitoring
-#
-uart: 
-#communication from TuyaMCU to tywe1s chip UART1
-  - id: tywe1s_uart
-    rx_pin: RX # Receives data from MCU, RX label on ESP32
-    tx_pin: TX # Transmits data to MCU, TX label on ESP32
-    baud_rate: 9600
-#Display message decoding UART2
-  - id: mcu_uart_TXpin
-    rx_pin: GPIO21 #attach new wire to TX labled pin on DISPLAY board
-    baud_rate: 2400
-    rx_buffer_size: 80
-    debug:
-      direction: RX
-      dummy_receiver: true
-      after:
-        delimiter: [0xCC, 0x33]
-      sequence:
-        - lambda: |-
-            UARTDebug::log_hex(direction, bytes, ' ');             
-            //Still log the data     
-            //Some packets have 5 bytes  
-            //might have to make this 3 if delimitar bytes get removed....
-            if (bytes.size()==5) {
-                if(bytes[0]==0xAA && bytes[1]==0x00) {
-                if(bytes[2]==0x20)
-                  id(MCUrawString).publish_state("Welcome to use");    
-                if(bytes[2]==0x6A)
-                  id(MCUrawString).publish_state("Goodbye!");              
-                if(bytes[2]==0x69)
-                  id(MCUrawString).publish_state("Cleaning");
-                if(bytes[2]==0x63)
-                  id(MCUrawString).publish_state("Cleaning");
-                if(bytes[2]==0x65)
-                  id(MCUrawString).publish_state("Lighting");
-                if(bytes[2]==0x66)
-                  id(MCUrawString).publish_state("Stabilization");
-                if(bytes[2]==0x62)
-                  id(MCUrawString).publish_state("Switching OFF");
-                //if(bytes[2]==0x??) 
-                  //id(MCUrawString).publish_state("Cooling");                                 
-              }              
-            }
-            //Some packets have 6 bytes
-            if (bytes.size()==6) {
-              if(bytes[1]==0x01 && bytes[2]==0x46 && bytes[3]==0x02) 
-                id(MCUrawString).publish_state("Welcome to use"); 
-                //AA:00:59:CC:33
-              if(bytes[1]==0x01 && bytes[2]==0x46 && bytes[3]==0x02) 
-                id(MCUrawString).publish_state("Switching off");                 
-              if(bytes[1]==0x01 && bytes[2]==0x49 && bytes[3]==0x80) 
-                id(MCUrawString).publish_state("Stabilization"); 
-              if(bytes[1]==0x01 && bytes[2]==0x49 && bytes[3]==0x00) 
-                id(MCUrawString).publish_state("Stabilization"); 
-              if(bytes[1]==0x01 && bytes[2]==0x49 && bytes[3]==0x81) 
-                id(MCUrawString).publish_state("ECO2"); 
-              if(bytes[1]==0x01 && bytes[2]==0x48 && bytes[3]==0x80) 
-                id(MCUrawString).publish_state("ECO1"); 
-              if(bytes[1]==0x01 && bytes[2]==0x48 && bytes[3]==0xC0) 
-                id(MCUrawString).publish_state("Idling - ECO2"); 
-              if(bytes[1]==0x01 && bytes[2]==0x49 && bytes[3]==0x01) 
-                id(MCUrawString).publish_state("Idling - ECO2"); 
-              if(bytes[1]==0x01 && bytes[2]==0x48 && bytes[3]==0x83) 
-                id(MCUrawString).publish_state("ECO1"); 
-              if(bytes[1]==0x01 && bytes[2]==0x48 && bytes[3]==0xC3) 
-                id(MCUrawString).publish_state("ECO2"); 
-              if(bytes[1]==0x01 && bytes[2]==0x49 && bytes[3]==0x81) 
-                id(MCUrawString).publish_state("Idling - ECO2");  
-            }
-#from Display control board RX pin to MCU board RX pin UART3
-#gives us real time exhaust pipe temps in middle byte
-  - id: mcu_uart_RXpin
-    rx_pin: GPIO22 #attach new wire to RX labled pin on DISPLAY board
-    baud_rate: 2400
-    rx_buffer_size: 80
-    debug:
-      direction: RX
-      dummy_receiver: true
-      after:
-        delimiter: [0xCC, 0x33]
-      sequence:
-        - lambda: |-
-            UARTDebug::log_hex(direction, bytes, ' ');  
-            //Still log the data     
-            //Some packets have 5 bytes  
-            //the full string-> the 7th HEX has the value I want(B8): AA:05:4B:00:00:26:B8:26:CC:33
-            if (bytes.size()==10) {               
-                // works up to approx 275 then it goes wonky somehow needing -72 instead of -36
-                //but who cares, we only need stable values to stoke the fire
-                id(pipe_converted).publish_state(((bytes[6]) * 1.8) - 4.0);          
-                  }     
-              
-# #
 globals:
-  - id: heartbeat_global
-    type: int
-    restore_value: no
-  - id: heartbeat_max_global
-    type: int
-    restore_value: no
-    initial_value: '8' #auger cycles 
   - id: auger_count_global
     type: int
     restore_value: no
@@ -188,167 +90,149 @@ globals:
   - id: power_select_lastvalue
     type: int
     restore_value: yes
-  - id: stoking_on_time_lastvalue
+  - id: set_temp_lastvalue
     type: int
-    restore_value: yes
+    restore_value: no
 #
-esphome:  
-  name: ${device_name}
-  platformio_options:
-    upload_speed: 115200
-    # REQUIRED FOR UART TO WORK
-    board_build.extra_flags:
-      - "-DARDUINO_USB_CDC_ON_BOOT=0"  # Override, defaults to '-DARDUINO_USB_CDC_ON_BOOT=1'
-  comment: ${device_description}
-  on_shutdown: 
-    priority: 1000
-    then:
-    - switch.turn_off: auger_output_to_optoisolator
-  on_boot:
-    priority: -100
-    then:
-      - switch.turn_off: auger_output_to_optoisolator
-      - delay: 5s
-      - switch.turn_off: auger_output_to_optoisolator      
-      - lambda: id(MCUrawString).publish_state("Booting ESP... delay 20s");            
-      - delay: 20s
-      - logger.log: "Now executing on_boot. 20s delay over, STARTING UP"
-      - switch.turn_off: auger_output_to_optoisolator
-      - select.set_index:
-          id: power_select
-          index: !lambda return id(power_select_lastvalue);
-          #set to saved flash value
-      - if:
-          condition:
-            - text_sensor.state: #Stove is IDLING, not HEATING
-                id: hvac_action_tuya
-                state: 'OFF'          
-          then:
-            - globals.set: #expose to ha
-                id: stoking_flag_global
-                value: 'false'  
-            - lambda: id(MCUrawString).publish_state("Goodbye!");  
-      - if:
-          condition:
-            and:
-            - text_sensor.state: #Stove is IDLING, not HEATING
-                id: hvac_action_tuya
-                state: 'IDLE'
-            - sensor.in_range: #stove is lit
-                id: stove_pipe_temp
-                above: 63.0  
-            - sensor.in_range: #stove is lit
-                id: stove_pipe_temp
-                below: 60.0 # 140.0       # exactly the point it switches           
-          then: #sometimes display gets confused when esp randomly reboots
-            - lambda: id(MCUrawString).publish_state("Idling - ECO2");
-      - if:
-          condition:
-            and:
-            - text_sensor.state: #Stove is IDLING, not HEATING
-                id: hvac_action_tuya
-                state: 'HEATING'          
-            - sensor.in_range: #stove is lit
-                id: stove_pipe_temp
-                above: 60 #140.0  # exactly the point it switches from "lighting to heating"
-          then:
-             - lambda: id(MCUrawString).publish_state("Stabilization");          
-          else:
-              #- lambda: id(MCUrawString).publish_state("ESP32 Booting...");           
-      - if:
-          condition: 
-            and:
-            - binary_sensor.is_on: p5z
-            - lambda: return !(id(new_auger_motor_power_level).is_running());  
-          then:
-            - switch.turn_on: p5_indicator
-            - logger.log: "0 new_auger_motor_power_level"
-            - script.execute: new_auger_motor_power_level            
-          else:  
-            - switch.turn_off: p5_indicator
- 
+uart: # define 3 hardware UARTS, 1 for TuyaMCU, others for MCU Display & temps monitoring
+  - id: tywe1s_uart # communication from TuyaMCU to tywe1s chip UART1
+    rx_pin: RX # Receives data from MCU, RX label on ESP32
+    tx_pin: TX # Transmits data to MCU, TX label on ESP32
+    baud_rate: 9600
+  - id: mcu_uart_TXpin # Display message decoding UART2
+    rx_pin: GPIO16 # attach new wire to TX labled pin on DISPLAY board
+    baud_rate: 2400
+    rx_buffer_size: 80
+    debug:
+      direction: RX
+      dummy_receiver: true
+      after:
+        delimiter: [0xCC, 0x33]
+      sequence:
+        - logger.log: "DIS"
+        - lambda: |-
+            UARTDebug::log_hex(direction, bytes, ' ');
+            if (bytes.size()==5) { //Some packets have 5 bytes  
+              //if(bytes[0]==0xAA && bytes[1]==0x00) {
+              if(bytes[0]==0xAA && bytes[1]==0x00 && bytes[2]!=0x4B) {
+                id(DISrawHEX).publish_state(str_sprintf("0x%02X",bytes[2]));
+                switch (bytes[2]) {
+                  case 0x20:
+                    id(DISrawString).publish_state("Willkommen!");
+                    break;
+                  case 0x62:
+                    id(DISrawString).publish_state("Ausschaltvorgang");
+                    break;
+                  case 0x63:
+                    id(DISrawString).publish_state("Reinigung");
+                    break;
+                  case 0x65:
+                    id(DISrawString).publish_state("Zuendung");
+                    break;
+                  case 0x66:
+                    id(DISrawString).publish_state("Stabilisierung");
+                    break;
+                  case 0x69:
+                    id(DISrawString).publish_state("Reinigung");
+                    break;
+                  case 0x6A:
+                    id(DISrawString).publish_state("Auf Wiedersehen!");
+                    break;
+                  default:
+                    break;
+                }
+              }
+            } else if (bytes.size()==6 && bytes[1]==0x01) { //Some packets have 6 bytes
+              if(bytes[2]==0x46 && bytes[3]==0x02) {
+                id(DISrawString).publish_state("Willkommen!"); 
+              }else if(bytes[2]==0x46 && bytes[3]==0x02) {
+                id(DISrawString).publish_state("Ausschaltvorgang");
+              }else if(bytes[2]==0x49 && bytes[3]==0x80) {
+                id(DISrawString).publish_state("Stabilisierung");
+              }else if(bytes[2]==0x49 && bytes[3]==0x00) {
+                id(DISrawString).publish_state("Stabilisierung");
+              }else if(bytes[2]==0x49 && bytes[3]==0x81) {
+                id(DISrawString).publish_state("ECO2");
+              }else if(bytes[2]==0x48 && bytes[3]==0x80) {
+                id(DISrawString).publish_state("ECO1");
+              }else if(bytes[2]==0x48 && bytes[3]==0xC0) {
+                id(DISrawString).publish_state("ECO2");
+              }else if(bytes[2]==0x49 && bytes[3]==0x01) {
+                id(DISrawString).publish_state("ECO2");
+              }else if(bytes[2]==0x48 && bytes[3]==0x83) {
+                id(DISrawString).publish_state("ECO1");
+              }else if(bytes[2]==0x48 && bytes[3]==0xC3) {
+                id(DISrawString).publish_state("ECO2");
+              }else if(bytes[2]==0x49 && bytes[3]==0x81) {
+                id(DISrawString).publish_state("ECO2");
+              }
+            }
+#
+  - id: mcu_uart_RXpin # from Display control board RX pin to MCU board RX pin UART3 gives us real time temps in middle byte
+    rx_pin: GPIO21 #attach new wire to RX labled pin on DISPLAY board
+    baud_rate: 2400
+    rx_buffer_size: 80
+    debug:
+      direction: RX
+      dummy_receiver: true
+      after:
+        delimiter: [0xCC, 0x33]
+      sequence:
+        - logger.log: "MCU"
+        - lambda: |-
+            UARTDebug::log_hex(direction, bytes, ' '); 
+            if (bytes.size()==10) {
+              //id(current_temp_uart).publish_state((bytes[5])-20); //Celsius
+              id(pipe_temp_uart).publish_state((bytes[6])-20); //Celsius
+              //id(protect_temp_uart).publish_state((bytes[7])-20); //Celsius
+            }
 #
 script:
-  - id: stoke_fire
-#started by on_value, 
-#if burnpot is starting to go out, then rekindle it
-    mode: single
-    then:                      
-    - logger.log: "1script.stoke_fire. ENTERING WHILE LOOP"
-    - script.stop: new_auger_motor_power_level
-    - while:
-        condition:
-          and:
-            - lambda: return id(stoking_flag);
-            - lambda: return id(tuya_climate);  # make sure stove is ON
-            # - text_sensor.state: #Stove is IDLING, not HEATING
-            #     id: hvac_action
-            #     state: 'IDLE'      
-            - sensor.in_range: #**** Stove is NOT lighting
-                id: stove_pipe_temp
-                above: 52.0 # 125.0                                    
-        then: # STOKE the fire to avoid E1 Error "fire went out"
-            - delay: 0.01s   #prevents race conditions from occuring
-            #might need to kick up P level so fan blows faster
-            - logger.log: 
-                format: "SCRIPT.STOKING.Stoking FIRE NOW | stoking_temp= %f"
-                args: ['id(stoking_temp).state']      #         
-            - switch.turn_on: auger_output_to_optoisolator    
-            - lambda: id(heartbeat_global) = 0;         
-            - delay: !lambda "return id(stoking_on_time).state * 1000;" # SECONDS ON
-            - switch.turn_off: auger_output_to_optoisolator    
-            - delay: !lambda "return id(stoking_off_time).state * 1000;" # SECONDS OFF 
-#
-#SCRIPT New P5 Power level Auger motor control      
-#Started by the following events: p5z, on_boot, MCUrawString
-#
-  - id: new_auger_motor_power_level
+  - id: auger_p5 # SCRIPT New P5 Power level Auger motor control, Started by the following events p5z, on_boot, DISrawString
     mode: single
     then:
-    - logger.log: "1script.new_auger_motor_power_level.STARTING"
-    - script.stop: stoke_fire
-#Main loop       
-    - while:
+    - logger.log: "1script.auger_p5.STARTING"
+    - while: #Main loop
         condition:
           and:
-            - text_sensor.state: #Stove is idling in ECO2 mode
-                id: hvac_action_tuya
-                state: 'IDLE'
-            - binary_sensor.is_on: p5z #We ARE In power level 5
-            - binary_sensor.is_off: stoking_flag #we arent stoking the fire
-            - lambda: return id(MCUrawString).state != "Cleaning";
-        then:      
-          - logger.log: "1script.new_auger_motor_power_level.ENTERING WHILE LOOP"        
-#new P5 Auger routine             
+          - binary_sensor.is_on: p5z #Power Level 5 is activated
+          - text_sensor.state: #Stove is idling in ECO2 mode
+              id: hvac_action_tuya
+              state: 'IDLE'
+          - lambda: return id(DISrawString).state == "ECO2";
+          - sensor.in_range: #**** Stove is burning, exhaust is hot
+              id: pipe_temp_uart
+              above: ${switch_lighting2heating}
+          - lambda: |- # equal or above setpoint
+                    if (id(current_temp).state >= id(set_temp).state) {
+                      return true;
+                    } else {
+                      return false;
+                    }
+        then:
           - if:
               condition:
-                - sensor.in_range: #**** Stove is lighting, exhaust is cold
-                    id: stove_pipe_temp
-                    below: 60.0 # 140          
+                - binary_sensor.is_off: stoking_flag #we aren't stoking the fire
               then:
-#                - logger.log: "2script.new_auger_motor_power_level.STOPPING SCRIPT, pipe temp < 140"
-                - script.stop: new_auger_motor_power_level
-          - switch.turn_on: auger_output_to_optoisolator    
-          - lambda: id(heartbeat_global) = 0;
-          - delay: !lambda "return id(auger_on_timez).state * 1000;"
-#          - logger.log: "3script.newP5 active. Auger ON delay completed" 
-          - switch.turn_off: auger_output_to_optoisolator  
-          - delay: !lambda "return id(auger_off_timez).state * 1000;"
-          # - logger.log: "4script.newP5 active. Auger OFF delay completed" 
-          # - logger.log: "1script.new_auger_motor_power_level.EXITING WHILE"                  
-    #ENDWHILE
+                - switch.turn_on: auger_output
+                - delay: !lambda "return id(auger_on_time).state * 1000;"
+                - switch.turn_off: auger_output  
+                - delay: !lambda "return id(auger_off_time).state * 1000;"
+              else:
+                - logger.log:
+                    format: "SCRIPT.Stoking FIRE NOW | stoking_temp= %f"
+                    args: ['id(stoking_temp).state']
+                - switch.turn_on: auger_output
+                - delay: !lambda "return id(stoking_on_time).state * 1000;" # SECONDS ON
+                - switch.turn_off: auger_output
+                - delay: !lambda "return id(stoking_off_time).state * 1000;" # SECONDS OFF
 #
-binary_sensor:     
-  - platform: template # template sensors expose sensors to HA
-    name: ${location} Stove Heartbeat Flag
-    id: heartbeat_ha_flag
-    # set it to the value of the global
-    lambda: |-
-      if (id(heartbeat_global) >= id(heartbeat_max_global)) {      
-        return true; } 
-      else { 
-          return false;
-      } 
+binary_sensor:
+  - platform: "tuya"
+    id: stove_on
+    name: "${location} Stove-Power On"
+    sensor_datapoint: 1
+#
   - platform: template # template sensors expose sensors to HA
     name: ${location} Stove Stoke Fire Flag
     id: stoking_flag
@@ -359,191 +243,112 @@ binary_sensor:
       } else {
         return false;
       }
-#read new P5 power mode from home assistant, toggle repurposed Timer LED on display module 
+#
   - platform: homeassistant
-    id: p5z
+    id: p5z #read new P5 power mode from home assistant, toggle repurposed Timer LED on display module 
     entity_id: input_boolean.${location}_stove_p5
     on_state:      
       then:
-        # - logger.log: "logger: P5 button changed"       
+        # - logger.log: "logger: P5 button changed"
         - if:
             condition:
-              - binary_sensor.is_on: p5z #p5 is  active                      
+              - binary_sensor.is_on: p5z #p5 is  active
             then:
-              - logger.log: "script.P5 sw = TRUE turning ON P5 indicator"
+              #- logger.log: "script.P5 sw = TRUE turning ON P5 indicator"
               - switch.turn_on: p5_indicator
-              - script.execute: new_auger_motor_power_level                               
             else: 
-              # - logger.log: "script.p5z  = FALSE, turning OFF P5 indicator"            
-              - switch.turn_off: p5_indicator   
-              - globals.set:
-                  id: stoking_flag_global
-                  value: 'false'                  
-              - script.stop: stoke_fire
-              - script.stop: new_auger_motor_power_level              
-        - if:
-            condition:
-              switch.is_on: p5_indicator   
-            then:
-              - logger.log: "GPIO21 sw = ON"
-            else:
-              - logger.log: "GPIO21 sw = OFF"                                    
+              # - logger.log: "script.p5z  = FALSE, turning OFF P5 indicator"
+              - switch.turn_off: p5_indicator
 #
-# MCU CONTROL BOARD AUGER SENSOR    
-  - platform: gpio
-    pin: GPIO25  # input only pin
+  - platform: gpio # MCU CONTROL BOARD AUGER SENSOR
+    pin: GPIO27  # input only pin
     internal: false # this is just a flag you expose and watch in Lovelace
-    id: ${location}_stove_auger_sensor_from_mcu
-    name: "${location} Stove Auger Sensor from MCU" #Auger signal from MCU, goes low when Auger motor is running
+    id: ${location}_stove_auger_input
+    name: "${location} Stove Auger Input" #Auger signal from MCU, goes low when Auger motor is running
     filters:
       - invert #flip it
     on_state: 
       then: 
-# Increment Heartbeat count reset it each time actual auger signal is felt.
-# if it gies over the global setting, restart either new power or stoking
-        - lambda: id(heartbeat_global) += 1;
-        - if: #check for heartbeat and restart scripts if it fails
-            condition: #if after 6 state changes (3 auger pulses), this means no auger of our own detected, then restart scripts        
-              - lambda: |-
-                  if (id(heartbeat_global) >= id(heartbeat_max_global)) {      
-                    return true; } 
-                  else { 
-                      return false;
-                  } 
-            then:    
-              - if: 
+        - if: # LIGHTING, ECHO Auger
+            condition:
+              and:
+                - text_sensor.state:
+                    id: DISrawString
+                    state: 'Zuendung'
+            then:
+              - if:
                   condition:
-                    - binary_sensor.is_on: stoking_flag
+                    and:
+                      - binary_sensor.is_on: ${location}_stove_auger_input
+                      - lambda: |- #limit pellets in hopper on lighting. it only needs 35 turns to actually light. Adjust this value if stove repeatedly fails to light every other time.
+                          if (id(auger_count_global) <= ${lighting_count}) {
+                            return true;
+                          } else {
+                            return false;
+                          }
                   then:
-                    - script.execute: stoke_fire
-                    - logger.log: "Auger.from.MCU.on_state ***HEARTBEAT stoke_fire RESET JUST OCCURED***"
+                    - switch.turn_on: auger_output
+                    # - logger.log: "2GPIO.AUGER TURNING"
+                    - lambda: id(auger_count_global) += 1; #keep track of how many auger turns happen and reset if stove lights
+                    - lambda: id(auger_counter).publish_state(id(auger_count_global)); #publish it to the sensor
+                  else: #TURN OFF - LIGHTING, echo Auger
+                     switch.turn_off: auger_output
+        - if: # REGULAR ECHO OF AUGER
+            condition:
+              or:
+                - binary_sensor.is_off: p5z # NOT In power level 5
+                - lambda: return id(DISrawString).state != "ECO2"; # NOT in ECO2
+                - lambda: return !(id(auger_p5).is_running());
+            then:
+              - if:
+                  condition:
+                    - binary_sensor.is_on: ${location}_stove_auger_input
+                  then:
+                    - switch.turn_on: auger_output
+                    #- logger.log: "3GPIO.AUGER TURNING"
                   else:
-                    - script.execute: new_auger_motor_power_level
-                    - logger.log: "Auger.from.MCU.on_state ***HEARTBEAT new_auger_motor_power_level RESET JUST OCCURED***"
-#TURN OFF - HEATING not IDLING
-        - if: 
-            condition:
-              and:
-                - binary_sensor.is_off: ${location}_stove_auger_sensor_from_mcu
-                - text_sensor.state: 
-                    id: hvac_action_tuya
-                    state: 'HEATING'         
-            then:
-              - switch.turn_off: auger_output_to_optoisolator
-#TURN OFF - LIGHTING, echo Auger
-        - if: 
-            condition:
-              and:
-                - binary_sensor.is_off: ${location}_stove_auger_sensor_from_mcu
-                - text_sensor.state:
-                    id: MCUrawString
-                    state: 'Lighting' 
-            then:
-              # - logger.log: "0GPIOI.Auger.from.MCU.Lighting"
-              - switch.turn_off: auger_output_to_optoisolator
-#TURN ON - HEATING (Stabilization), ECHO Auger
-        - if: 
-            condition:
-              and:
-                - binary_sensor.is_on: ${location}_stove_auger_sensor_from_mcu
-                - text_sensor.state: #Stove is HEATING, not IDLING
-                    id: hvac_action_tuya
-                    state: 'HEATING'    
-            then:
-              - switch.turn_on: auger_output_to_optoisolator 
-              - lambda: id(heartbeat_global) = 0; 
-              # - logger.log: "1GPIO.AUGER TURNING"
-#TURN ON - LIGHTING, ECHO Auger
-        - if: 
-            condition:
-              and:
-                - binary_sensor.is_on: ${location}_stove_auger_sensor_from_mcu
-                - text_sensor.state:
-                    id: MCUrawString
-                    state: 'Lighting' 
-        #limit pellets in hopper on lighting. it only needs 35 turns to actually light. 
-        #adjust this value if stove repeatedly fails to light every other time. 
-                - lambda: |-
-                    if (id(auger_count_global) <= ${lighting_count}) {      
-                      return true; } 
-                    else { 
-                        return false;
-                      } 
-            then:
-              - switch.turn_on: auger_output_to_optoisolator
-              - lambda: id(heartbeat_global) = 0; 
-              # - logger.log: "2GPIO.AUGER TURNING"
-              - lambda: id(auger_count_global) += 1; #keep track of how many auger turns happen and reset if stove lights
-              - lambda: id(auger_counter).publish_state(id(auger_count_global)); #publish it to the sensor
-#TURN ON - REGULAR ECHO OF AUGER
-        - if:
-            condition:
-              and:
-                - binary_sensor.is_off: p5z #NOT In power level 5
-                - binary_sensor.is_on: ${location}_stove_auger_sensor_from_mcu  
-            then:
-                - switch.turn_on: auger_output_to_optoisolator
-                - lambda: id(heartbeat_global) = 0; 
-                # - logger.log: "3GPIO18.AUGER TURNING"
-        - if:
-            condition:
-              and:
-                - binary_sensor.is_off: p5z #NOT In power level 5
-                - binary_sensor.is_off: ${location}_stove_auger_sensor_from_mcu              
-            then:
-              - switch.turn_off: auger_output_to_optoisolator
+                    - switch.turn_off: auger_output
+#            else: #Stove in power level 5
+#              - if: #check for heartbeat and restart scripts if it fails
+#                  condition:
+#                    and:
+#                      - lambda: return id(DISrawString).state == "ECO2";
+#                      - lambda: |- #if after 6 state changes (3 auger pulses), this means no auger of our own detected, then restart scripts
+#                          if (id(heartbeat_global) >= id(heartbeat_max_global)) {
+#                            return true;
+#                          } else {
+#                            return false;
+#                          }
+#                  then:
+#                    - script.execute: auger_p5
+#
 button:
   - platform: restart #allows remote reset of tywe1s chip from home assistant or internally
     id: restart_esp
-    name: "${location} Stove Restart" 
+    name: "${location} Stove Restart"
+#
   - platform: safe_mode # required to upload firmware if were low on memory. put chip in safe mode, reboot, then OTA upload new firmware.
     name: "${location} Stove SAFE Mode BUTTON"        
 #
 # DEFINE ALL SENSORS AND SWITCHES
 #
 text_sensor:
-  # - platform: homeassistant
-  #   id: exhaust_trend
-  #   entity_id: sensor.house_stove_pipe_heating_or_cooling #trend sensor in HA. 
-  #   #not working consistently.  will have to implement this directly in ESPHome, not rely on HA.... 
-  #   #Value can be either "Heating"or "Cooling" or "Idling & Cool"
-  #   on_value:      
-  #     then:
-  #       - logger.log: "logger: **TREND** HA trend sensor Changed to HEATING"       
-  #       - if:
-  #           condition:
-  #             and:
-  #             - binary_sensor.is_on: stoking_flag
-  #             - lambda: |-
-  #                   if (x == "Heating") {
-  #                     return true;
-  #                   } else {
-  #                     return false;
-  #                   }
-  #           then:
-  #             #set a global flag instead oscillation doesnt happen
-  #             - logger.log: "**TREND** HA Stoking Cooling Flag = 'HEATING' -> turning OFF stoking" 
-  #             - globals.set:
-  #                 id: stoking_flag_global
-  #                 value: 'false'                   
-  #             - script.stop: stoke_fire            
-  #             - script.execute: new_auger_motor_power_level 
-
   - platform: debug
     device:
       name: "${location} Stove Device Info"
     reset_reason:
       name: "${location} Stove Reset Reason"
-      
-#from MCU in the display board, gives us what specific text is shown on the display
-  - platform: template
-    id: MCUrawString
-    name: ${location}_stove_display_text_sensor
-    on_value:   # When value simply changes
-      - logger.log: "0MCUrawString.on_value.entered  DISPLAY CHANGED"               
+#
+  - platform: template #from DISPLAY MCU in the display board, gives us what specific text is shown on the display
+    id: DISrawHEX
+    name: ${location} Stove Display HEX Sensor
+#   
+  - platform: template #from MCU in the display board, gives us what specific text is shown on the display
+    id: DISrawString
+    name: ${location} Stove Display Text Sensor
 #
   - platform: template
-    name: "${location} Stove Uptime (formatted)"
+    name: "${location} Stove Uptime"
     lambda: |-
       uint32_t dur = id(uptime_s).state;
       int dys = dur / 86400;
@@ -555,71 +360,40 @@ text_sensor:
       return str_sprintf("%ud %02uh %02um %02us", dys, hrs, mnts, dur);
     icon: mdi:clock-start
     update_interval: 30s
- #This sensor is changing all the time and the ONLY indicator of what state the stove is in
-  - platform: template
+#
+  - platform: template #This sensor is changing all the time and the ONLY indicator of what state the stove is in
     id: hvac_action_tuya
-    name: "${location} Stove hvac_action_tuya"
+    name: "${location} Stove HVAC action Tuya"
     lambda: |-
       switch (id(tuya_climate).action) {
         case CLIMATE_ACTION_OFF:
           return (std::string) "OFF";
+          break;
         case CLIMATE_ACTION_HEATING:
-        return (std::string) "HEATING";
+          return (std::string) "HEATING";
+          break;
         case CLIMATE_ACTION_IDLE:
           return (std::string) "IDLE";
+          break;
         default:
           return (std::string) "UNKNOWN";
+          break;
       }
-#this sensor changes from HEATING to IDLE in ECO2 mode or when we reach set temp in ECO1.  
-    on_value:
+    on_value: #this sensor changes from HEATING to IDLE in ECO2 mode or when we reach set temp in ECO1.
       - if:
           condition:
-              - lambda: return id(MCUrawString).state == "OFF";
+            - binary_sensor.is_off: stove_on
           then: 
-            - globals.set: #expose to ha
-                id: stoking_flag_global
-                value: 'false'  
-            - lambda: id(MCUrawString).publish_state("Goodbye!"); 
-      - if:
-          condition:
-            and:
-              - lambda: return id(MCUrawString).state != "Lighting";
-              - lambda: return id(MCUrawString).state != "Cleaning";
-              - lambda: return id(MCUrawString).state != "Switching OFF";
-              - text_sensor.state: #Stove is idling in ECO2 mode
-                  id: hvac_action_tuya
-                  state: 'IDLE'
-              - sensor.in_range: #stove is lit
-                  id: stove_pipe_temp
-                  below: 60.0 #140.0       # exactly the point it switches from lighting to...
-          then: 
-            - if: 
-                condition:
-                 - lambda: return !(id(new_auger_motor_power_level).is_running());
-                then:
-                - lambda: id(MCUrawString).publish_state("ECO2 - Idling");
-                - logger.log: "hvac_action_tuya -> IDLE. STARTING new_auger_motor_power_level"
-                - script.execute: new_auger_motor_power_level        
-      - if:
-          condition:
-            and:
-              - lambda: return id(MCUrawString).state != "Switching OFF";
-              - text_sensor.state: #Stove is heating in ECO2 mode
-                  id: hvac_action_tuya
-                  state: 'HEATING'
-          then: 
-            - logger.log: "hvac_action_tuya -> HEATING. STOPPING new_auger_motor_power_level"
-            - lambda: id(MCUrawString).publish_state("  Stabilazation");
-            - script.stop: new_auger_motor_power_level
+            #- lambda: id(DISrawString).publish_state("Auf Wiedersehen!"); 
 #
 i2c: # For time of flight sensor
-  sda: 32
+  sda: 5
   scl: 33
 #
 sensor:    
   - platform: wifi_signal
     name: "${location} Stove WiFi Signal db"
-    update_interval: 10s 
+    update_interval: 30s 
     id: wifi_signal_db 
 #
   - platform: copy # Reports the WiFi signal strength in %
@@ -628,121 +402,37 @@ sensor:
     filters:
       - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
     unit_of_measurement: "Signal %"
-    entity_category: "diagnostic"        
+    entity_category: "diagnostic"
 #
   - platform: debug
     free:
       name: "${location} Stove Heap Free"
-#THIS SHOULD ONLY CONTROL STOKING OR NOT
-  - platform: template
-    id: pipe_converted
+#
+#  - platform: template
+#    id: current_temp_uart
+#    unit_of_measurement: "°C"
+#    name: "${location} Stove UART Current Temp"
+#
+  - platform: template #THIS SHOULD ONLY CONTROL STOKING OR NOT
+    id: pipe_temp_uart
+    unit_of_measurement: "°C"
     name: "${location} Stove UART Pipe Temp"
-    on_value:   # When value simply changes
-      then:     
-        - if:
-            condition:
-              and:
-                - lambda: return id(MCUrawString).state != "Switching OFF";
-                - lambda: return id(MCUrawString).state != "Lighting";
-                - lambda: return id(tuya_climate);  # make sure stove is ON
-                - sensor.in_range: # not lighting
-                      id: pipe_converted
-                      above: 55.0 # 130.0                  
-                - sensor.in_range: #just to be safe
-                      id: pipe_converted
-                      below: 93.0 # 200.0                                 
-                - binary_sensor.is_on: p5z
-                #Adjust the stoking_temp value in HA to keep pot from burning out
-                - lambda: |-
-                    if (id(pipe_converted).state <= id(stoking_temp).state) {
-                      return true;
-                    } else {
-                      return false;
-                    }
-            then:  
-              - logger.log: "0 uart pipe temp stoking conditions met "
-              - globals.set: #expose to ha
-                    id: stoking_flag_global
-                    value: 'true'     
-              - if:
-                  condition:
-                    - lambda: return (id(new_auger_motor_power_level).is_running());
-                  then:
-                    - logger.log: "1 uart stopping new powe level&starting stoking"
-                    - script.stop: new_auger_motor_power_level                                     
-                    - script.execute: stoke_fire
-        - if:
-            condition:
-              and:
-                - lambda: return id(MCUrawString).state != "Switching OFF";
-                - lambda: return id(tuya_climate);  # make sure stove is ON
-                - sensor.in_range: # not lighting
-                      id: pipe_converted
-                      above: 55.0 # 130.0                  
-                - sensor.in_range: #just to be safe
-                      id: pipe_converted
-                      below: 93.0 # 200.0                                 
-                - binary_sensor.is_on: p5z
-                #Adjust the stoking_temp value in HA to keep pot from burning out
-                - lambda: |-
-                    if (id(pipe_converted).state >= id(stoking_temp).state) {
-                      return true;
-                    } else {
-                      return false;
-                    }
-            then:      
-              - logger.log: "2 uart not stoking but idling"
-              - globals.set:
-                  id: stoking_flag_global
-                  value: 'false'               
-              - if:
-                  condition:
-                  - lambda: return (id(stoke_fire).is_running());
-                  then:           
-                  - logger.log: "3 uart stopping stoke script"
-                  - script.stop: stoke_fire
-              - if:
-                  condition:
-                  - lambda: return !(id(new_auger_motor_power_level).is_running());  
-                  - text_sensor.state: #Stove is heating in ECO2 mode
-                      id: hvac_action_tuya
-                      state: 'IDLE'              
-                  then:
-                  - logger.log: "4 uart starting new auger power level script in 25s"
-                  #give a pellet break so temp doesnt rise too quickly
-                  #- delay: !lambda "return id(auger_off_timez).state * 1000 * 4;"
-                  - delay: 25s
-                  - script.execute: new_auger_motor_power_level 
-
-        - if: #reset Auger counter as soon as stove starts to light
-              #and interrupt it in 'echo auger' at just the right level to avoid ESC1 errors from too much fuel in pot and stove burningbto hot on startup
-            condition: 
-              - sensor.in_range: 
-                  id: pipe_converted
-                  above: 52.0 # 125.0 #stove is lit. reset counter                      
-            then:
-              - if:
-                  condition:
-                    - lambda: |-
-                        if (id(auger_count_global) > 0) {      
-                          return true; } 
-                        else { 
-                            return false;
-                          } 
-                  then:      
-                      - lambda: id(auger_count_global) = 0;
-                      - lambda: id(auger_counter).publish_state(id(auger_count_global));   
-#              
+#
+  #- platform: template
+  # id: protect_temp_uart
+  #  unit_of_measurement: "°C"
+  #  name: "${location} Stove UART Protect Temp"
+#
   - platform: template
-    name: ${location} Stove Auger Counter (lighting)
-    id: auger_counter   
+    name: ${location} Stove-Auger Counter (Lighting)
+    id: auger_counter
 #get these object values from home assistant 
   - platform: homeassistant
-    id: auger_off_timez
+    id: auger_off_time
     entity_id: input_number.${location}_stove_auger_off_time #helper in home assistant
 #
   - platform: homeassistant
-    id: auger_on_timez
+    id: auger_on_time
     entity_id: input_number.${location}_stove_auger_on_time #helper in home assistant
 #    
   - platform: homeassistant
@@ -760,72 +450,72 @@ sensor:
     entity_id: input_number.${location}_stove_stoking_off_time #helper in home assistant
     force_update: true
 #    
-  - platform: vl53l0x  # <- MUCH more accurate and less noise than Ultrasonic sensors!
-    name: "${location} Stove raw pellet level"
+  - platform: vl53l0x
+    name: "${location} Stove-RAW Pellet Level"
     address: 0x29
     long_range: true
     timeout: 200us
-    update_interval: 60s
+    update_interval: 10s
     unit_of_measurement: "m"
     accuracy_decimals: 2
     on_value:
       then:
-# Replace 0.4 by the height of hopper. From the sensor to the bottom.
-# website to know how to multiply values :https://www.skillsyouneed.com/num/percent-change.html 
         - sensor.template.publish:
             id: ultrasonic_smoothed
-            state: !lambda 'return (0.4-x)*(100/0.4);'
-# 
+            state: !lambda 'return ((0.47-(x-0.03))*(100/0.47));' # Replace 0.4 by the height of hopper. From the sensor to the bottom.
+                                                                  # Website to know how to multiply values :https://www.skillsyouneed.com/num/percent-change.html 
+#
   - platform: template
     id: ultrasonic_smoothed
-    update_interval: 30s    
-    accuracy_decimals: 0     
+    update_interval: 30s
+    accuracy_decimals: 0
     unit_of_measurement: "%"
-    icon: "mdi:sack-percent"    
-    name: "${location} Stove pellet level processed & filtered"
+    icon: "mdi:sack-percent"
+    name: "${location} Stove-Pellet Level"
     filters:
       - sliding_window_moving_average:
           window_size: 60
           send_every: 15
-  #
-  - platform: "tuya"
-    name: "${location} Stove-Power On"
-    sensor_datapoint: 1
-    id: stove_on
 #
   - platform: "tuya"
-    name: "${location} Stove-Error Code"
     id: error_code
+    name: "${location} Stove-Error Code"
     sensor_datapoint: 104
 #
   - platform: "tuya"
+    id: power_mode
     name: "${location} Stove-Power Mode"
     sensor_datapoint: 4
 #
   - platform: "tuya"
+    id: set_temp
     name: "${location} Stove-Set Temp"
+    unit_of_measurement: "°C"
     sensor_datapoint: 2
 #
   - platform: "tuya"
     id: current_temp
     name: "${location} Stove-Current Temp"
+    unit_of_measurement: "°C"
     sensor_datapoint: 3
     filters:
-    - exponential_moving_average: #this swensor is NOISY!
-        alpha: 0.07
+    - exponential_moving_average: #this sensor is NOISY!
+        alpha: 0.7
 #
   - platform: "tuya"
+    id: pipe_temp
     name: "${location} Stove-Pipe Temp"
-    id: stove_pipe_temp
-    sensor_datapoint: 108
-# #                               
+    unit_of_measurement: "°C"
+    sensor_datapoint: 102
+#
   - platform: "tuya"
+    id: protect_temp
     name: "${location} Stove-Protect Temp"
-    sensor_datapoint: 109
+    unit_of_measurement: "°C"
+    sensor_datapoint: 103
 #
   - platform: uptime
-    internal: false
-    name: ${friendly_name} Uptime
+    internal: true
     id: uptime_s
     update_interval: 10s
 #
@@ -838,12 +528,13 @@ select:
     id: power_select
     enum_datapoint: 4
     options:
-      0: P1-High
-      1: P2-Med High
-      2: P3-Med Low
-      3: P4-Low      
-    on_value: #store lat value so it can be restored on power/boot up
-      - lambda: id(power_select_lastvalue) = i;
+      0: P1-Hoch
+      1: P2-Mittelhoch
+      2: P3-Mittel
+      3: P4-Niedrig    
+    on_value: #store last value so it can be restored on power/boot up
+      then:
+        - lambda: id(power_select_lastvalue) = i;
 #
   - platform: "tuya"
     tuya_id: "${location}"
@@ -851,8 +542,20 @@ select:
     id: eco_mode
     enum_datapoint: 101
     options:
-      0: ECO1 - Heat then OFF
-      1: ECO2 - Px then P4
+      0: ECO1 - Heizen dann AUS
+      1: ECO2 - Heizen dann P4
+    on_value:
+        then:
+          - lambda: id(set_temp_lastvalue) = id(set_temp).state;
+          - logger.log:
+              format: "set_temp_lastvalue= %i"
+              args: ['id(set_temp_lastvalue)']
+        #- climate.control:
+        #    id: tuya_climate
+        #    target_temperature: 25
+        #- climate.control:
+        #    id: tuya_climate
+        #    target_temperature: 20
 #
 # Data points observed in Tuya iOT platform during debug mode
 #1 - Power on (Heat)
@@ -860,11 +563,10 @@ select:
 #3 - Current Temp
 #4 - Mode P1/P2/P3P4
 #101 - ECO1/ECO2
+#102 - Pipe Temp
+#103 - Protect Temp
 #104 - Error Code
-#106 -
-#107 - 
-#108 - Pipe Temp
-#109 - Protect Temp
+
 #-----------------
 #Datapoint 1: switch (value: ON)
 #Datapoint 2: int value (value: 20) in °C
@@ -876,13 +578,6 @@ select:
 #Datapoint 104: bitmask (value: 0)
 #GPIO Configuration: status: pin 5, reset: pin 0
 #Product: 'k5dWTKaI3Z9llDEA1.0.0'
-
-
-#Datapoint 105: enum (value: 0)
-#Datapoint 106: int value (value: 68)
-#Datapoint 107: int value (value: 64)
-#Datapoint 108: int value (value: 68)
-#Datapoint 109: int value (value: 72)
 #
 # Register the Tuya MCU connection
 tuya:
@@ -890,38 +585,34 @@ tuya:
   uart_id: tywe1s_uart
 #
 switch:
-#This sends the Auger signal to the optoisolator to turn on the Auger motor    
-  - platform: gpio
+  - platform: gpio #This sends the Auger signal to the optoisolator to turn on the Auger motor
+    name: "${location} Stove Auger Output"
     pin: GPIO25 #this pin remains high at bootup and reset, no extra pellets disbursed
-    name: "${location} Stove AugerOut to optoisolator +LED"
-    id: auger_output_to_optoisolator  
-    inverted: yes    
-#FAILSAFE. IF AUGER EVER GETS STUCK on for over 5s, TURN IT OFF
-    on_turn_on:
+    inverted: yes
+    id: auger_output
+    on_turn_on: #FAILSAFE. IF AUGER EVER GETS STUCK on for over 5s, TURN IT OFF
       - delay: 5s
-      - switch.turn_off: auger_output_to_optoisolator
+      - switch.turn_off: auger_output
 #
-#wire the time LED on front panel to GPIO1 to indicate when new P5 level is on       
-  - platform: gpio
-    pin: GPIO19 #use 470ohm resistor in line w led
-    name: "${location} Stove P5 indicator LED"
+  - platform: gpio #wire the time LED on front panel to GPIO1 to indicate when new P5 level is on
+    pin: GPIO19
     inverted: yes
     id: p5_indicator
-#                    
-# automate resetting stove errors using this button
-  - platform: gpio
-    pin: GPIO23
+    internal: true
+#
+  - platform: gpio # automate resetting stove errors using this button
     name: "${location} Stove Thumbsup RESET"
+    pin: GPIO26
     inverted: yes
     id: thumbsup
     on_turn_on:
       - delay: 3.5s #hold time needed to reset error on display
-      - switch.turn_off: thumbsup   
+      - switch.turn_off: thumbsup
 #
 climate:
   - platform: tuya
-    reports_fahrenheit: true # bug in stove requires this new flag.
-    name: "${location} Wood Pellet Stove"
+    reports_fahrenheit: false # bug in stove requires this new flag.
+    name: "${location} Stove"
     id: tuya_climate
     switch_datapoint: 1
     target_temperature_datapoint: 2
@@ -930,3 +621,112 @@ climate:
       min_temperature: 10.0 #celcius
       max_temperature: 25.0
       temperature_step: 1
+#
+esphome:  
+  name: ${device_name}
+  platformio_options:
+    upload_speed: 115200 
+    board_build.extra_flags: # REQUIRED FOR UART TO WORK
+      - "-DARDUINO_USB_CDC_ON_BOOT=0"  # Override, defaults to '-DARDUINO_USB_CDC_ON_BOOT=1'
+  comment: ${device_description}
+  on_boot:
+    priority: -100
+    then:
+      #- switch.turn_off: auger_output
+      #- delay: 5s
+      - switch.turn_off: auger_output
+      - lambda: id(DISrawString).publish_state("Booting ESP... warte 20s");
+      - delay: 20s
+      - logger.log: "Now executing on_boot. 20s delay over, STARTING UP"
+      #- switch.turn_off: auger_output
+      - select.set_index:
+          id: power_select
+          index: !lambda return id(power_select_lastvalue); # set to saved flash value
+      - lambda: |- # initially publish some values to the sensor
+                id(auger_counter).publish_state(id(auger_count_global)); // initially publish it to the sensor
+                id(DISrawHEX).publish_state(str_sprintf("0x%02X",0));
+                id(DISrawString).publish_state("Status unbekannt");
+      - if:
+          condition:
+            - binary_sensor.is_off: stove_on
+          then:
+            - lambda: |-
+                      id(DISrawHEX).publish_state("0x6A");
+                      id(DISrawString).publish_state("Auf Wiedersehen!");
+          else:
+            - if:
+                condition:
+                  and:
+                  - text_sensor.state: #Stove HEATING not IDLING
+                      id: hvac_action_tuya
+                      state: 'HEATING'
+                then:
+                  - if:
+                      condition:
+                        - sensor.in_range: #stove is lit
+                            id: pipe_temp_uart
+                            above: ${switch_lighting2heating}
+                      then:
+                        - lambda: id(DISrawString).publish_state("Stabilisierung");
+                      else:
+                        - lambda: id(DISrawString).publish_state("Zuendung");
+                        #- lambda: id(DISrawString).publish_state("Reinigung");
+      - if:
+          condition: 
+            and:
+            - binary_sensor.is_on: p5z
+          then:
+            - switch.turn_on: p5_indicator
+          else:  
+            - switch.turn_off: p5_indicator
+  on_shutdown: 
+    priority: 1000
+    then:
+    - switch.turn_off: auger_output
+  on_loop:
+    - if:
+        condition:
+          and:
+            - binary_sensor.is_on: stove_on
+            - binary_sensor.is_on: p5z
+            - lambda: return id(DISrawString).state == "ECO2";
+            - text_sensor.state: #Stove is idling in ECO2 mode
+                id: hvac_action_tuya
+                state: 'IDLE'
+            - sensor.in_range: #stove is lit
+                id: pipe_temp_uart
+                above: ${switch_lighting2heating}
+            - lambda: |- # equal or above setpoint
+                      if (id(current_temp).state >= id(set_temp).state) {
+                        return true;
+                      } else {
+                        return false;
+                      }
+        then:
+          - if:
+              condition:
+                - lambda: |-
+                          if (id(pipe_temp_uart).state <= id(stoking_temp).state) {
+                            return true;
+                          } else {
+                            return false;
+                          }
+              then:
+                - globals.set: #expose to ha
+                    id: stoking_flag_global
+                    value: 'true'
+              else:
+                - globals.set: #expose to ha
+                    id: stoking_flag_global
+                    value: 'false'
+          - if:
+              condition:
+                - lambda: return !(id(auger_p5).is_running());
+              then:
+                - logger.log: "Starting auger_p5"
+                - script.execute: auger_p5
+        else:
+          - globals.set:
+              id: stoking_flag_global
+              value: 'false'
+          - script.stop: auger_p5
