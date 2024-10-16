@@ -1,11 +1,9 @@
-#pellet
 #----------------------------------------------------------
 # TUYA WOOD PELLET STOVE Converted to ESP32
-# Version 4.0: BPoHVoodoo
-# changed to use with Nemaxx Px,
+# Version 3.2 by BPoHVoodoo
+# cleaned up code,
 # changed to use °C instead of Fahrenheit
-# simplified Code
-# P5 only kicks in, if SET_TEMP < CURRENT_TEMP and if we are 100% sure to be in ECO2
+# added WebServer
 # version; 3.1.0
 # changed to use with Nemaxx Px, added WebServer
 # date: 04-10-23 bug fixes
@@ -38,6 +36,14 @@ substitutions:
   location: Irgendwo
   lighting_count: "45" #sets max number of dumps of pellets during lighting
   switch_lighting2heating: "60.0" # 60°C or 140.0 F  # exactly the point it switches from "lighting to heating"
+  message_welcome: "Willkommen!"
+  message_cleaning: "Reinigung"
+  message_igniting: "Zuendung"
+  message_stabilization: "Stabilisierung"
+  message_cooling: "Abkuehlen"
+  message_switchoff: "Ausschaltvorgang"
+  message_goodbye: "Auf Wiedersehen!"
+  message_eco2: "ECO2"
 #----------------------------------------------------------
 #
 esp32:
@@ -58,7 +64,7 @@ ota:
   password: !secret ota_password
 #
 wifi:
-  #use_address: 192.168.123.52 # use when renaming this node
+  use_address: 192.168.123.52 # use when renaming this node
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   power_save_mode: none
@@ -87,10 +93,20 @@ globals:
     type: bool
     initial_value: "false"
     restore_value: yes
-  - id: power_select_lastvalue
+  - id: p5_flag_global
+    type: bool
+    initial_value: "false"
+    restore_value: yes
+  - id: DisRaw_global
+    type: char
+    restore_value: yes
+  - id: DisRaw_lastvalue_global
+    type: char
+    restore_value: yes
+  - id: power_select_lastvalue_global
     type: int
     restore_value: yes
-  - id: set_temp_lastvalue
+  - id: set_temp_lastvalue_global
     type: int
     restore_value: no
 #
@@ -109,62 +125,42 @@ uart: # define 3 hardware UARTS, 1 for TuyaMCU, others for MCU Display & temps m
       after:
         delimiter: [0xCC, 0x33]
       sequence:
-        - logger.log: "DIS"
+        #- logger.log: "DIS"
         - lambda: |-
             UARTDebug::log_hex(direction, bytes, ' ');
             if (bytes.size()==5) { //Some packets have 5 bytes  
-              //if(bytes[0]==0xAA && bytes[1]==0x00) {
               if(bytes[0]==0xAA && bytes[1]==0x00 && bytes[2]!=0x4B) {
-                id(DISrawHEX).publish_state(str_sprintf("0x%02X",bytes[2]));
-                switch (bytes[2]) {
-                  case 0x20:
-                    id(DISrawString).publish_state("Willkommen!");
-                    break;
-                  case 0x62:
-                    id(DISrawString).publish_state("Ausschaltvorgang");
-                    break;
-                  case 0x63:
-                    id(DISrawString).publish_state("Reinigung");
-                    break;
-                  case 0x65:
-                    id(DISrawString).publish_state("Zuendung");
-                    break;
-                  case 0x66:
-                    id(DISrawString).publish_state("Stabilisierung");
-                    break;
-                  case 0x69:
-                    id(DISrawString).publish_state("Reinigung");
-                    break;
-                  case 0x6A:
-                    id(DISrawString).publish_state("Auf Wiedersehen!");
-                    break;
-                  default:
-                    break;
-                }
+                if(bytes[2]==0x20 || bytes[2]==0x62 || bytes[2]==0x63 || bytes[2]==0x65 || bytes[2]==0x66 || bytes[2]==0x69 || bytes[2]==0x6A) {
+                  id(DisRaw_lastvalue_global)=id(DisRaw_global);
+                  id(DisRaw_global) = bytes[2];
+                  id(DisplayText).execute();
+                } else {
+                  id(DISrawHEX).publish_state(str_sprintf("0x%02X",bytes[2]));
+                }         
               }
-            } else if (bytes.size()==6 && bytes[1]==0x01) { //Some packets have 6 bytes
-              if(bytes[2]==0x46 && bytes[3]==0x02) {
-                id(DISrawString).publish_state("Willkommen!"); 
-              }else if(bytes[2]==0x46 && bytes[3]==0x02) {
-                id(DISrawString).publish_state("Ausschaltvorgang");
-              }else if(bytes[2]==0x49 && bytes[3]==0x80) {
-                id(DISrawString).publish_state("Stabilisierung");
-              }else if(bytes[2]==0x49 && bytes[3]==0x00) {
-                id(DISrawString).publish_state("Stabilisierung");
-              }else if(bytes[2]==0x49 && bytes[3]==0x81) {
-                id(DISrawString).publish_state("ECO2");
-              }else if(bytes[2]==0x48 && bytes[3]==0x80) {
-                id(DISrawString).publish_state("ECO1");
-              }else if(bytes[2]==0x48 && bytes[3]==0xC0) {
-                id(DISrawString).publish_state("ECO2");
-              }else if(bytes[2]==0x49 && bytes[3]==0x01) {
-                id(DISrawString).publish_state("ECO2");
-              }else if(bytes[2]==0x48 && bytes[3]==0x83) {
-                id(DISrawString).publish_state("ECO1");
-              }else if(bytes[2]==0x48 && bytes[3]==0xC3) {
-                id(DISrawString).publish_state("ECO2");
-              }else if(bytes[2]==0x49 && bytes[3]==0x81) {
-                id(DISrawString).publish_state("ECO2");
+            } else if (bytes.size()==6 && bytes[0]==0xAA && bytes[1]==0x01) { //Some packets have 6 bytes
+              if(bytes[2]==0x46 && bytes[3]==0x02) { //Welcome to use
+                id(DisRaw_lastvalue_global)=id(DisRaw_global);
+                id(DisRaw_global) = bytes[3];
+                id(DisplayText).execute();
+              } else if(bytes[2]==0x49 && bytes[3]==0x80) { //Stabilization
+                id(DisRaw_lastvalue_global)=id(DisRaw_global);
+                id(DisRaw_global) = bytes[3];
+                id(DisplayText).execute();
+              } else if(bytes[2]==0x49 && bytes[3]==0x81) { //ECO2
+                id(DisRaw_lastvalue_global)=id(DisRaw_global);
+                id(DisRaw_global) = bytes[3];
+                id(DisplayText).execute();
+              //}else if(bytes[2]==0x49 && bytes[3]==0x01) {
+              //  id(DISrawString).publish_state("ECO2");
+              //}else if(bytes[2]==0x48 && bytes[3]==0x80) {
+              //  id(DISrawString).publish_state("ECO1");
+              //}else if(bytes[2]==0x48 && bytes[3]==0xC0) {
+              //  id(DISrawString).publish_state("ECO2");
+              //}else if(bytes[2]==0x48 && bytes[3]==0x83) {
+              //  id(DISrawString).publish_state("ECO1");
+              //}else if(bytes[2]==0x48 && bytes[3]==0xC3) {
+              //  id(DISrawString).publish_state("ECO2");
               }
             }
 #
@@ -178,7 +174,7 @@ uart: # define 3 hardware UARTS, 1 for TuyaMCU, others for MCU Display & temps m
       after:
         delimiter: [0xCC, 0x33]
       sequence:
-        - logger.log: "MCU"
+        #- logger.log: "MCU"
         - lambda: |-
             UARTDebug::log_hex(direction, bytes, ' '); 
             if (bytes.size()==10) {
@@ -191,41 +187,80 @@ script:
   - id: auger_p5 # SCRIPT New P5 Power level Auger motor control, Started by the following events p5z, on_boot, DISrawString
     mode: single
     then:
-    - logger.log: "1script.auger_p5.STARTING"
-    - while: #Main loop
-        condition:
-          and:
-          - binary_sensor.is_on: p5z #Power Level 5 is activated
-          - text_sensor.state: #Stove is idling in ECO2 mode
-              id: hvac_action_tuya
-              state: 'IDLE'
-          - lambda: return id(DISrawString).state == "ECO2";
-          - sensor.in_range: #**** Stove is burning, exhaust is hot
-              id: pipe_temp_uart
-              above: ${switch_lighting2heating}
-          - lambda: |- # equal or above setpoint
-                    if (id(current_temp).state >= id(set_temp).state) {
-                      return true;
-                    } else {
-                      return false;
-                    }
-        then:
-          - if:
-              condition:
-                - binary_sensor.is_off: stoking_flag #we aren't stoking the fire
-              then:
-                - switch.turn_on: auger_output
-                - delay: !lambda "return id(auger_on_time).state * 1000;"
-                - switch.turn_off: auger_output  
-                - delay: !lambda "return id(auger_off_time).state * 1000;"
-              else:
-                - logger.log:
-                    format: "SCRIPT.Stoking FIRE NOW | stoking_temp= %f"
-                    args: ['id(stoking_temp).state']
-                - switch.turn_on: auger_output
-                - delay: !lambda "return id(stoking_on_time).state * 1000;" # SECONDS ON
-                - switch.turn_off: auger_output
-                - delay: !lambda "return id(stoking_off_time).state * 1000;" # SECONDS OFF
+      - logger.log: "1script.auger_p5.STARTING"
+      - while: #Main loop
+          condition:
+            and:
+            - binary_sensor.is_on: p5z #Power Level 5 is activated
+            - text_sensor.state: #Stove is idling in ECO2 mode
+                id: hvac_action_tuya
+                state: 'IDLE'
+            - lambda: return id(DisRaw_global) == 0x81;
+            - sensor.in_range: #**** Stove is burning, exhaust is hot
+                id: pipe_temp_uart
+                above: ${switch_lighting2heating}
+            # equal or above setpoint
+            - lambda: return id(current_temp).state >= id(set_temp).state;
+          then:
+            - if:
+                condition:
+                  - binary_sensor.is_off: stoking_flag #we aren't stoking the fire
+                then:
+                  - switch.turn_on: auger_output
+                  - delay: !lambda "return id(auger_on_time).state * 1000;"
+                  - switch.turn_off: auger_output  
+                  - delay: !lambda "return id(auger_off_time).state * 1000;"
+                else:
+                  - logger.log:
+                      format: "SCRIPT.Stoking FIRE NOW | stoking_temp= %f"
+                      args: ['id(stoking_temp).state']
+                  - switch.turn_on: auger_output
+                  - delay: !lambda "return id(stoking_on_time).state * 1000;" # SECONDS ON
+                  - switch.turn_off: auger_output
+                  - delay: !lambda "return id(stoking_off_time).state * 1000;" # SECONDS OFF
+#
+  - id: DisplayText # SCRIPT New P5 Power level Auger motor control, Started by the following events p5z, on_boot, DISrawString
+    mode: single
+    then:
+      - lambda: |-
+                id(DISrawHEX).publish_state(str_sprintf("0x%02X",id(DisRaw_global)));
+                switch (id(DisRaw_global)) {
+                  case 0x02:
+                    id(DISrawString).publish_state("${message_welcome}");
+                    break;
+                  case 0x20:
+                    id(DISrawString).publish_state("${message_welcome}");
+                    break;
+                  case 0x62:
+                    id(DISrawString).publish_state("${message_switchoff}");
+                    break;
+                  case 0x63:
+                    id(DISrawString).publish_state("${message_cleaning}");
+                    break;
+                  case 0x65:
+                    id(DISrawString).publish_state("${message_igniting}");
+                    break;
+                  case 0x66:
+                    id(DISrawString).publish_state("${message_stabilization}");
+                    break;
+                  case 0x69:
+                    id(DISrawString).publish_state("${message_cooling}");
+                    break;
+                  case 0x6A:
+                    id(DISrawString).publish_state("${message_goodbye}");
+                    break;
+                  case 0x6C:
+                    id(DISrawString).publish_state("${message_cleaning}");
+                    break;
+                  case 0x80:
+                    id(DISrawString).publish_state("${message_stabilization}");
+                    break;
+                  case 0x81:
+                    id(DISrawString).publish_state("${message_eco2}");
+                    break;
+                  default:
+                    break;
+                }
 #
 binary_sensor:
   - platform: "tuya"
@@ -237,32 +272,30 @@ binary_sensor:
     name: ${location} Stove Stoke Fire Flag
     id: stoking_flag
     # set it to the value of the global
-    lambda: |-
-      if (id(stoking_flag_global) == 1) {
-        return true;
-      } else {
-        return false;
-      }
+    lambda: return id(stoking_flag_global) == 1;
+#
+  - platform: template # template sensors expose sensors to HA
+    name: ${location} Stove P5 active Flag
+    id: p5_flag
+    # set it to the value of the global
+    lambda: return id(p5_flag_global) == 1;
 #
   - platform: homeassistant
     id: p5z #read new P5 power mode from home assistant, toggle repurposed Timer LED on display module 
     entity_id: input_boolean.${location}_stove_p5
     on_state:      
       then:
-        # - logger.log: "logger: P5 button changed"
         - if:
             condition:
               - binary_sensor.is_on: p5z #p5 is  active
             then:
-              #- logger.log: "script.P5 sw = TRUE turning ON P5 indicator"
               - switch.turn_on: p5_indicator
             else: 
-              # - logger.log: "script.p5z  = FALSE, turning OFF P5 indicator"
               - switch.turn_off: p5_indicator
 #
   - platform: gpio # MCU CONTROL BOARD AUGER SENSOR
     pin: GPIO27  # input only pin
-    internal: false # this is just a flag you expose and watch in Lovelace
+    internal: true # this is just a flag you expose and watch in Lovelace
     id: ${location}_stove_auger_input
     name: "${location} Stove Auger Input" #Auger signal from MCU, goes low when Auger motor is running
     filters:
@@ -271,33 +304,39 @@ binary_sensor:
       then: 
         - if: # LIGHTING, ECHO Auger
             condition:
-              and:
-                - text_sensor.state:
-                    id: DISrawString
-                    state: 'Zuendung'
+              - lambda: return id(DisRaw_global) == 0x65;
             then:
               - if:
                   condition:
                     and:
                       - binary_sensor.is_on: ${location}_stove_auger_input
-                      - lambda: |- #limit pellets in hopper on lighting. it only needs 35 turns to actually light. Adjust this value if stove repeatedly fails to light every other time.
-                          if (id(auger_count_global) <= ${lighting_count}) {
-                            return true;
-                          } else {
-                            return false;
-                          }
+                      #limit pellets in hopper on lighting. it only needs 35 turns to actually light. Adjust this value if stove repeatedly fails to light every other time.
+                      - lambda: return id(auger_count_global) <= ${lighting_count}; 
+                          
                   then:
                     - switch.turn_on: auger_output
-                    # - logger.log: "2GPIO.AUGER TURNING"
                     - lambda: id(auger_count_global) += 1; #keep track of how many auger turns happen and reset if stove lights
                     - lambda: id(auger_counter).publish_state(id(auger_count_global)); #publish it to the sensor
                   else: #TURN OFF - LIGHTING, echo Auger
                      switch.turn_off: auger_output
+            else:
+              - if:
+                  condition: 
+                    - sensor.in_range: 
+                        id: pipe_temp_uart
+                        above: ${switch_lighting2heating} #stove is lit. reset counter                      
+                  then:
+                    - if:
+                        condition:
+                          - lambda: return id(auger_count_global) > 0;
+                        then:      
+                            - lambda: id(auger_count_global) = 0;
+                            - lambda: id(auger_counter).publish_state(id(auger_count_global));
         - if: # REGULAR ECHO OF AUGER
             condition:
               or:
                 - binary_sensor.is_off: p5z # NOT In power level 5
-                - lambda: return id(DISrawString).state != "ECO2"; # NOT in ECO2
+                - lambda: return id(DisRaw_global) != 0x81; # NOT in ECO2
                 - lambda: return !(id(auger_p5).is_running());
             then:
               - if:
@@ -305,23 +344,9 @@ binary_sensor:
                     - binary_sensor.is_on: ${location}_stove_auger_input
                   then:
                     - switch.turn_on: auger_output
-                    #- logger.log: "3GPIO.AUGER TURNING"
                   else:
                     - switch.turn_off: auger_output
-#            else: #Stove in power level 5
-#              - if: #check for heartbeat and restart scripts if it fails
-#                  condition:
-#                    and:
-#                      - lambda: return id(DISrawString).state == "ECO2";
-#                      - lambda: |- #if after 6 state changes (3 auger pulses), this means no auger of our own detected, then restart scripts
-#                          if (id(heartbeat_global) >= id(heartbeat_max_global)) {
-#                            return true;
-#                          } else {
-#                            return false;
-#                          }
-#                  then:
-#                    - script.execute: auger_p5
-#
+
 button:
   - platform: restart #allows remote reset of tywe1s chip from home assistant or internally
     id: restart_esp
@@ -534,7 +559,7 @@ select:
       3: P4-Niedrig    
     on_value: #store last value so it can be restored on power/boot up
       then:
-        - lambda: id(power_select_lastvalue) = i;
+        - lambda: id(power_select_lastvalue_global) = i;
 #
   - platform: "tuya"
     tuya_id: "${location}"
@@ -546,10 +571,10 @@ select:
       1: ECO2 - Heizen dann P4
     on_value:
         then:
-          - lambda: id(set_temp_lastvalue) = id(set_temp).state;
+          - lambda: id(set_temp_lastvalue_global) = id(set_temp).state;
           - logger.log:
               format: "set_temp_lastvalue= %i"
-              args: ['id(set_temp_lastvalue)']
+              args: ['id(set_temp_lastvalue_global)']
         #- climate.control:
         #    id: tuya_climate
         #    target_temperature: 25
@@ -586,6 +611,7 @@ tuya:
 #
 switch:
   - platform: gpio #This sends the Auger signal to the optoisolator to turn on the Auger motor
+    internal: true
     name: "${location} Stove Auger Output"
     pin: GPIO25 #this pin remains high at bootup and reset, no extra pellets disbursed
     inverted: yes
@@ -641,17 +667,16 @@ esphome:
       #- switch.turn_off: auger_output
       - select.set_index:
           id: power_select
-          index: !lambda return id(power_select_lastvalue); # set to saved flash value
+          index: !lambda return id(power_select_lastvalue_global); # set to saved flash value
       - lambda: |- # initially publish some values to the sensor
                 id(auger_counter).publish_state(id(auger_count_global)); // initially publish it to the sensor
-                id(DISrawHEX).publish_state(str_sprintf("0x%02X",0));
                 id(DISrawString).publish_state("Status unbekannt");
+      - script.execute: DisplayText
       - if:
           condition:
             - binary_sensor.is_off: stove_on
           then:
             - lambda: |-
-                      id(DISrawHEX).publish_state("0x6A");
                       id(DISrawString).publish_state("Auf Wiedersehen!");
           else:
             - if:
@@ -689,36 +714,33 @@ esphome:
           and:
             - binary_sensor.is_on: stove_on
             - binary_sensor.is_on: p5z
-            - lambda: return id(DISrawString).state == "ECO2";
+            - lambda: return id(DisRaw_global) == 0x81;
             - text_sensor.state: #Stove is idling in ECO2 mode
                 id: hvac_action_tuya
                 state: 'IDLE'
             - sensor.in_range: #stove is lit
                 id: pipe_temp_uart
                 above: ${switch_lighting2heating}
-            - lambda: |- # equal or above setpoint
-                      if (id(current_temp).state >= id(set_temp).state) {
-                        return true;
-                      } else {
-                        return false;
-                      }
+            - lambda: return id(current_temp).state >= id(set_temp).state;
         then:
+          - globals.set:
+              id: p5_flag_global
+              value: 'true'
           - if:
               condition:
-                - lambda: |-
-                          if (id(pipe_temp_uart).state <= id(stoking_temp).state) {
-                            return true;
-                          } else {
-                            return false;
-                          }
+                - lambda: return id(pipe_temp_uart).state < id(stoking_temp).state;
               then:
                 - globals.set: #expose to ha
                     id: stoking_flag_global
                     value: 'true'
               else:
-                - globals.set: #expose to ha
-                    id: stoking_flag_global
-                    value: 'false'
+                - if:
+                    condition:
+                      - lambda: return id(pipe_temp_uart).state > id(stoking_temp).state;
+                    then:
+                      - globals.set: #expose to ha
+                          id: stoking_flag_global
+                          value: 'false'
           - if:
               condition:
                 - lambda: return !(id(auger_p5).is_running());
@@ -728,5 +750,8 @@ esphome:
         else:
           - globals.set:
               id: stoking_flag_global
+              value: 'false'
+          - globals.set:
+              id: p5_flag_global
               value: 'false'
           - script.stop: auger_p5
