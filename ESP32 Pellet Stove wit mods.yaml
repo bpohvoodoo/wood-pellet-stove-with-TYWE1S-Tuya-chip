@@ -32,7 +32,7 @@ substitutions:
   device_name: "pelletofen"
   device_description: Pellet Ofen mit ESPHome auf ESP32Thing
   friendly_name: Pellet-Ofen
-  location: Werne
+  location: Irgendwo
   lighting_count: "40" #sets max number of dumps of pellets during lighting
   switch_lighting2heating: "60.0" # 60°C or 140.0 F  # exactly the point it switches from "lighting to heating"
   message_welcome: "Willkommen!"
@@ -115,8 +115,8 @@ globals:
 
 uart: # define 3 hardware UARTS, 1 for TuyaMCU, others for MCU Display & temps monitoring
   - id: tywe1s_uart # communication from TuyaMCU to tywe1s chip UART1
-    rx_pin: TX # Receives data from MCU, RX label on ESP32
-    tx_pin: RX # Transmits data to MCU, TX label on ESP32
+    rx_pin: RX # Receives data from MCU, RX label on ESP32
+    tx_pin: TX # Transmits data to MCU, TX label on ESP32
     baud_rate: 9600
     rx_buffer_size: 256
   - id: mcu_uart_TXpin # Display message decoding UART2
@@ -404,12 +404,12 @@ sensor:
 #
 #  - platform: debug
 #    free:
-#      name: "Heap Free"
+#      name: "${location} Stove Heap Free"
 #
 #  - platform: template
 #    id: current_temp_uart
 #    unit_of_measurement: "°C"
-#    name: "UART Current Temp"
+#    name: "${location} Stove UART Current Temp"
 #
   - platform: template #THIS SHOULD ONLY CONTROL STOKING OR NOT
     id: pipe_temp_uart
